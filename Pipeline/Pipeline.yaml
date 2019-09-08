@@ -1,0 +1,68 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  Version.MajorMinor: 1.0
+  Version.Revision: $[counter(variables['Version.MajorMinor'], 0)]
+
+steps:
+- task: DownloadSecureFile@1
+  name: codeSignPFX
+  displayName: 'Download secure file'
+  inputs:
+    secureFile: 'PowerON_CodeSigning_2019.pfx'
+
+- task: PowerShell@2
+  displayName: 'Install Required Modules'
+  inputs:
+    targetType: filePath
+    filePath: ./pipeline/InstallModules.ps1
+
+- task: PowerShell@2
+  displayName: 'Build Module'
+  inputs:
+    targetType: filePath
+    filePath: ./pipeline/BuildModule.ps1
+
+- task: PowerShell@2
+  displayName: 'Debug Pipeline'
+  script: Get-childItem Env:
+
+- task: PowerShell@2
+  displayName: 'Sign Module'
+  inputs:
+    targetType: filePath
+    filePath: ./pipeline/BuildModule.ps1
+    pwsh: true # PowerShell Core has arguments for silent pfx passwords
+env:
+    PFXPassword: $(CodeSigningPassword)
+
+- task: richardfennellBM.BM-VSTS-PesterRunner-Task.Pester-Task.Pester@8
+  displayName: 'Pester Test Runner'
+  inputs:
+    scriptFolder: '$(System.DefaultWorkingDirectory)\Tests\*'
+    CodeCoverageOutputFile: '$(System.DefaultWorkingDirectory)\CodeCov.XML'
+    CodeCoverageFolder: '$(System.DefaultWorkingDirectory)\Output\*'
+
+- task: PublishTestResults@2
+  displayName: 'Publish Test Results **/TEST-*.xml'
+
+- task: PublishCodeCoverageResults@1
+  displayName: 'Publish code coverage from d'
+  inputs:
+    summaryFileLocation: '$(System.DefaultWorkingDirectory)\CodeCov.XML'
+    pathToSources: '$(System.DefaultWorkingDirectory)\Output\*'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Module'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)\Output'
+    ArtifactName: Template
