@@ -10,25 +10,27 @@ pool:
   vmImage: 'windows-latest'
 
 variables:
+  ModuleName: 'Template'
+  PFXName: 'PowerON_CodeSigning_2019.pfx'
+  ArtifactsFeed: '54e21fe6-7df4-4ffa-a6bd-a729b96f63cf'
   Version.MajorMinor: 1.0
   Version.Revision: $[counter(variables['Version.MajorMinor'], 0)]
   Version: $[format('{0}.{1}', variables['Version.MajorMinor'], variables['Version.Revision'])]
   system.debug: true
-  ModuleName: 'Template'
 
 steps:
 - task: DownloadSecureFile@1
   name: codeSignPFX
   displayName: 'Download secure file'
   inputs:
-    secureFile: 'PowerON_CodeSigning_2019.pfx'
+    secureFile: $(PFXName)
 
-- task: PowerShell@2
-  displayName: 'Debug Pipeline'
-  inputs:
-    targetType: inline
-    script: 'Get-childItem Env:'
-    pwsh: true
+#- task: PowerShell@2
+#  displayName: 'Debug Pipeline'
+#  inputs:
+#    targetType: inline
+#    script: 'Get-childItem Env:'
+#    pwsh: true
 
 - task: PowerShell@2
   displayName: 'Install Required Modules'
@@ -45,18 +47,18 @@ steps:
     pwsh: true #modules must be loaded into the same version of PowerShell that they are used from
 
 - task: PowerShell@2
-  displayName: 'Debug Files Pipeline'
-  inputs:
-    targetType: inline
-    script: 'Get-childItem $Env:BUILD_SOURCESDIRECTORY -Recurse'
-    pwsh: true
-
-- task: PowerShell@2
   displayName: 'Generate NuSpec File'
   inputs:
     targetType: filePath
     filePath: ./Pipeline/New-NuSpec.ps1
     pwsh: true #modules must be loaded into the same version of PowerShell that they are used from
+
+#- task: PowerShell@2
+#  displayName: 'Debug Files Pipeline'
+#  inputs:
+#    targetType: inline
+#    script: 'Get-childItem $Env:BUILD_SOURCESDIRECTORY -Recurse'
+#    pwsh: true
 
 - task: PowerShell@2
   displayName: 'Sign Module'
@@ -76,28 +78,51 @@ steps:
 
 - task: PublishTestResults@2
   displayName: 'Publish Test Results **/TEST-*.xml'
+  inputs:
+    testResultsFormat: 'NUnit'
+    testResultsFiles: '**/TEST-*.xml'
 
 - task: PublishCodeCoverageResults@1
   displayName: 'Publish code coverage from Pester Tests'
   inputs:
     summaryFileLocation: '$(Build.SourcesDirectory)\CodeCov.XML'
-    pathToSources: '$(Build.SourcesDirectory)\Output\*'
+    pathToSources: '$(Build.SourcesDirectory)\Output'
 
 - task: PublishBuildArtifacts@1
   displayName: 'Publish Module'
   inputs:
     PathtoPublish: '$(Build.SourcesDirectory)\Output'
-    ArtifactName: Template
+    ArtifactName: $(ModuleName)
+
+#- task: PublishBuildArtifacts@1
+#  displayName: 'Debug Publish'
+#  inputs:
+#    PathtoPublish: '$(Build.SourcesDirectory)'
+#    ArtifactName: '$(ModuleName)Debug'
 
 - task: NuGetCommand@2
   displayName: 'Create NuGet Package'
   inputs:
-    command: pack
-    vstsFeed: '8f10fc6c-88a4-484a-88e0-cb0933c57839'
+    command: 'pack'
+    vstsFeed: '$(ArtifactsFeed)'
     packagesToPack: '**/*.nuspec'
+    versioningScheme: 'byEnvVar'
+    versionEnvVar: 'Version'
 
 - task: NuGetCommand@2
   displayName: 'Publish Module to Azure Artifacts Feed'
   inputs:
     command: push
-    publishVstsFeed: '8f10fc6c-88a4-484a-88e0-cb0933c57839'
+    publishVstsFeed: $(ArtifactsFeed)
+
+- task: UniversalPackages@0
+  displayName: Universal Publish
+  inputs:
+    command: 'publish'
+    publishDirectory: '$(Build.SourcesDirectory)\Output'
+    feedsToUsePublish: 'internal'
+    vstsFeedPublish: $(ArtifactsFeed)
+    vstsFeedPackagePublish: $(ModuleNameToLower)
+    versionOption: 'custom'
+    versionPublish: '$(Version)'
+    packagePublishDescription: $(ModuleDescription)

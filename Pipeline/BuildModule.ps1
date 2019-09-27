@@ -28,3 +28,9 @@ Set-Content -Path $FullBuildPath -Value $ModuleDataFile
 Write-Verbose "Output Directory: $BuildOutput"
 
 Build-Module -OutputDirectory $BuildOutput -SourcePath $BuildRoot
+
+$ModuleSettings = Import-PowerShellDataFile -Path $BuildSettings.Path -ErrorAction Stop
+
+#Publish Module Description from Manifest file to pipeline
+Write-Host "##vso[task.setvariable variable=ModuleDescription]$($ModuleSettings.Description)"
+Write-Host "##vso[task.setvariable variable=ModuleNameToLower]$($Env:ModuleName.toLower())"
