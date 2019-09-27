@@ -1,9 +1,11 @@
-$ModuleName = "Template"
 $ContentRoot = Split-Path -Path $PSScriptRoot -Parent
-$ModuleRoot = Join-Path -Path $PSScriptRoot -ChildPath "Output"
-$ModulePath = Join-Path -Path $ModuleRoot -ChildPath $ModuleName
-$ModuleVersionPath = Join-Path -Path $ModulePath -ChildPath $env:Version.Revision
+$ModuleRoot = Join-Path -Path $ContentRoot -ChildPath "Output"
+$ModulePath = Join-Path -Path $ModuleRoot -ChildPath $Env:ModuleName
+$ModuleVersionPath = Join-Path -Path $ModulePath -ChildPath $env:Version
+$ModuleDataPath = Join-Path -Path $ModuleVersionPath -ChildPath "$($Env:ModuleName).psm1"
 
-$SignCert = Get-PfxCertificate -FilePath $(codeSignPFX.secureFilePath) -Password $env:PFXPassword
+$SecureString = ConvertTo-SecureString -String $env:PFXPassword -AsPlainText -Force
 
-Set-AuthenticodeSignature -PSPath .\ToBeSigned.ps1 -Certificate $SignCert
+$SignCert = Get-PfxCertificate -FilePath $env:CODESIGNPFX_SECUREFILEPATH -Password $SecureString
+
+Set-AuthenticodeSignature -PSPath $ModuleDataPath -Certificate $SignCert

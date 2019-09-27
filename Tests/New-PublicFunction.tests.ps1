@@ -1,7 +1,6 @@
-$ModuleName = "Template"
 $ContentRoot = Split-Path -Path $PSScriptRoot -Parent
-$ModuleRoot = Join-Path -Path $PSScriptRoot -ChildPath "Output"
-$ModulePath = Join-Path -Path $ModuleRoot -ChildPath $ModuleName
+$ModuleRoot = Join-Path -Path $ContentRoot -ChildPath "Output"
+$ModulePath = Join-Path -Path $ModuleRoot -ChildPath $Env:ModuleName
 
 describe 'Testing Template Module' {
 	context 'Module Loads Successfully' {

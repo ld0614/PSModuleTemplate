@@ -7,11 +7,14 @@ trigger:
 - master
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'windows-latest'
 
 variables:
   Version.MajorMinor: 1.0
   Version.Revision: $[counter(variables['Version.MajorMinor'], 0)]
+  Version: $[format('{0}.{1}', variables['Version.MajorMinor'], variables['Version.Revision'])]
+  system.debug: true
+  ModuleName: 'Template'
 
 steps:
 - task: DownloadSecureFile@1
@@ -21,48 +24,80 @@ steps:
     secureFile: 'PowerON_CodeSigning_2019.pfx'
 
 - task: PowerShell@2
+  displayName: 'Debug Pipeline'
+  inputs:
+    targetType: inline
+    script: 'Get-childItem Env:'
+    pwsh: true
+
+- task: PowerShell@2
   displayName: 'Install Required Modules'
   inputs:
     targetType: filePath
-    filePath: ./pipeline/InstallModules.ps1
+    filePath: ./Pipeline/InstallModules.ps1
+    pwsh: true #PowerShell 6 has changes to the way package providers work
 
 - task: PowerShell@2
   displayName: 'Build Module'
   inputs:
     targetType: filePath
-    filePath: ./pipeline/BuildModule.ps1
+    filePath: ./Pipeline/BuildModule.ps1
+    pwsh: true #modules must be loaded into the same version of PowerShell that they are used from
 
 - task: PowerShell@2
-  displayName: 'Debug Pipeline'
-  script: Get-childItem Env:
+  displayName: 'Debug Files Pipeline'
+  inputs:
+    targetType: inline
+    script: 'Get-childItem $Env:BUILD_SOURCESDIRECTORY -Recurse'
+    pwsh: true
+
+- task: PowerShell@2
+  displayName: 'Generate NuSpec File'
+  inputs:
+    targetType: filePath
+    filePath: ./Pipeline/New-NuSpec.ps1
+    pwsh: true #modules must be loaded into the same version of PowerShell that they are used from
 
 - task: PowerShell@2
   displayName: 'Sign Module'
   inputs:
     targetType: filePath
-    filePath: ./pipeline/BuildModule.ps1
+    filePath: ./Pipeline/SignModule.ps1
     pwsh: true # PowerShell Core has arguments for silent pfx passwords
-env:
+  env:
     PFXPassword: $(CodeSigningPassword)
 
 - task: richardfennellBM.BM-VSTS-PesterRunner-Task.Pester-Task.Pester@8
   displayName: 'Pester Test Runner'
   inputs:
-    scriptFolder: '$(System.DefaultWorkingDirectory)\Tests\*'
-    CodeCoverageOutputFile: '$(System.DefaultWorkingDirectory)\CodeCov.XML'
-    CodeCoverageFolder: '$(System.DefaultWorkingDirectory)\Output\*'
+    scriptFolder: '$(Build.SourcesDirectory)\Tests\*'
+    CodeCoverageOutputFile: '$(Build.SourcesDirectory)\CodeCov.XML'
+    CodeCoverageFolder: '$(Build.SourcesDirectory)\Output\*'
 
 - task: PublishTestResults@2
   displayName: 'Publish Test Results **/TEST-*.xml'
 
 - task: PublishCodeCoverageResults@1
-  displayName: 'Publish code coverage from d'
+  displayName: 'Publish code coverage from Pester Tests'
   inputs:
-    summaryFileLocation: '$(System.DefaultWorkingDirectory)\CodeCov.XML'
-    pathToSources: '$(System.DefaultWorkingDirectory)\Output\*'
+    summaryFileLocation: '$(Build.SourcesDirectory)\CodeCov.XML'
+    pathToSources: '$(Build.SourcesDirectory)\Output\*'
 
 - task: PublishBuildArtifacts@1
   displayName: 'Publish Module'
   inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)\Output'
+    PathtoPublish: '$(Build.SourcesDirectory)\Output'
     ArtifactName: Template
+
+- task: NuGetCommand@2
+  displayName: 'Create NuGet Package'
+  inputs:
+    command: pack
+    vstsFeed: '8f10fc6c-88a4-484a-88e0-cb0933c57839'
+    packagesToPack: '**/*.nuspec'
+
+- task: NuGetCommand@2
+  displayName: 'Publish Module to Azure Artifacts Feed'
+  inputs:
+    command: push
+    publishVstsFeed: '8f10fc6c-88a4-484a-88e0-cb0933c57839'
